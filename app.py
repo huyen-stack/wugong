@@ -1,3 +1,4 @@
+
 # -*- coding: utf-8 -*-
 import os
 import json
@@ -343,96 +344,98 @@ return [
 ]
 
 def build_spec_json(
-duration_sec: float,
-style_preset_key: str,
-main_char_key: str,
-opp_char_key: str,
-extra_char_key: str,
-combo_key: str,
-energy_level: str,
-violence_level: str,
-camera_preset_key: str,
-include_micro: bool,
-include_breath: bool,
-include_env: bool,
-include_camera_detail: bool,
-blood_level: str,
-audio_hint: str
+    duration_sec: float,
+    style_preset_key: str,
+    main_char_key: str,
+    opp_char_key: str,
+    extra_char_key: str,
+    combo_key: str,
+    energy_level: str,
+    violence_level: str,
+    camera_preset_key: str,
+    include_micro: bool,
+    include_breath: bool,
+    include_env: bool,
+    include_camera_detail: bool,
+    blood_level: str,
+    audio_hint: str
 ) -> Dict[str, Any]:
-"""Assemble the spec_json sent to Gemini based on UI selections."""
-style_preset = STYLE_PRESETS[style_preset_key]
-style_tags = style_preset["style_tags"]
+    # Assemble the spec_json sent to Gemini based on UI selections.
+    style_preset = STYLE_PRESETS[style_preset_key]
+    style_tags = style_preset["style_tags"]
+
     main_char = CHARACTERS[main_char_key]
-opp_char = CHARACTERS[opp_char_key]
-combo = COMBO_PRESETS[combo_key]
-camera_preset = CAMERA_PRESETS[camera_preset_key]
+    opp_char = CHARACTERS[opp_char_key]
+    combo = COMBO_PRESETS[combo_key]
+    camera_preset = CAMERA_PRESETS[camera_preset_key]
 
-shots = build_camera_shots(camera_preset["shots_template"], duration_sec)
+    shots = build_camera_shots(camera_preset["shots_template"], duration_sec)
 
-characters_block: Dict[str, Any] = {
-    "main": {
-        "id": "main_fighter",
-        "role": main_char["role"],
-        "nationality_style": main_char["nationality_style"],
-        "visual_brief": main_char["visual_brief"],
-        "motion_personality": main_char["motion_personality"]
-    },
-    "opponent": {
-        "id": "opponent_fighter",
-        "role": opp_char["role"],
-        "nationality_style": opp_char["nationality_style"],
-        "visual_brief": opp_char["visual_brief"],
-        "motion_personality": opp_char["motion_personality"]
-    }
-}
-
-if extra_char_key != "none" and extra_char_key in CHARACTERS:
-    extra_char = CHARACTERS[extra_char_key]
-    characters_block["extras"] = [
-        {
-            "id": "extra_fighter_1",
-            "role": extra_char["role"],
-            "nationality_style": extra_char["nationality_style"],
-            "visual_brief": extra_char["visual_brief"],
-            "motion_personality": extra_char["motion_personality"]
+    characters_block: Dict[str, Any] = {
+        "main": {
+            "id": "main_fighter",
+            "role": main_char["role"],
+            "nationality_style": main_char["nationality_style"],
+            "visual_brief": main_char["visual_brief"],
+            "motion_personality": main_char["motion_personality"]
+        },
+        "opponent": {
+            "id": "opponent_fighter",
+            "role": opp_char["role"],
+            "nationality_style": opp_char["nationality_style"],
+            "visual_brief": opp_char["visual_brief"],
+            "motion_personality": opp_char["motion_personality"]
         }
-    ]
-
-spec = {
-    "clip_config": {
-        "duration_sec": duration_sec,
-        "aspect_ratio": "9:16",
-        "style_tags": style_tags,
-        "energy_level": energy_level,
-        "violence_level": violence_level
-    },
-    "characters": characters_block,
-    "combo_plan": {
-        "combo_id": combo_key,
-        "high_level_description": combo["description"],
-        "tempo": "explosive_then_brief_pause",
-        "intensity": "high"
-    },
-    "camera_plan": {
-        "overall_style": camera_preset["label"],
-        "shots": shots
-    },
-    "extra_controls": {
-        "include_micro_expressions": include_micro,
-        "include_breath_sweat_fatigue": include_breath,
-        "include_environment_reaction": include_env,
-        "include_camera_details": include_camera_detail,
-        "blood": blood_level,
-        "audio_hint": audio_hint,
-        "safety_constraints": "no graphic gore, follow platform rules, respect the blood setting."
-    },
-    "output_prefs": {
-        "need_english_video_prompt": True,
-        "need_chinese_timeline": True,
-        "timeline_step": 0.1
     }
-}
-return spec
+
+    if extra_char_key != "none" and extra_char_key in CHARACTERS:
+        extra_char = CHARACTERS[extra_char_key]
+        characters_block["extras"] = [
+            {
+                "id": "extra_fighter_1",
+                "role": extra_char["role"],
+                "nationality_style": extra_char["nationality_style"],
+                "visual_brief": extra_char["visual_brief"],
+                "motion_personality": extra_char["motion_personality"]
+            }
+        ]
+
+    spec = {
+        "clip_config": {
+            "duration_sec": duration_sec,
+            "aspect_ratio": "9:16",
+            "style_tags": style_tags,
+            "energy_level": energy_level,
+            "violence_level": violence_level
+        },
+        "characters": characters_block,
+        "combo_plan": {
+            "combo_id": combo_key,
+            "high_level_description": combo["description"],
+            "tempo": "explosive_then_brief_pause",
+            "intensity": "high"
+        },
+        "camera_plan": {
+            "overall_style": camera_preset["label"],
+            "shots": shots
+        },
+        "extra_controls": {
+            "include_micro_expressions": include_micro,
+            "include_breath_sweat_fatigue": include_breath,
+            "include_environment_reaction": include_env,
+            "include_camera_details": include_camera_detail,
+            "blood": blood_level,
+            "audio_hint": audio_hint,
+            "safety_constraints": "no graphic gore, follow platform rules, respect the blood setting."
+        },
+        "output_prefs": {
+            "need_english_video_prompt": True,
+            "need_chinese_timeline": True,
+            "timeline_step": 0.1
+        }
+    }
+    return spec
+
 -------------------------
 4. Streamlit APP UI
 -------------------------
