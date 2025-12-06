@@ -1,4 +1,3 @@
-
 # -*- coding: utf-8 -*-
 import os
 import json
@@ -6,9 +5,9 @@ from typing import Dict, Any, List
 
 import streamlit as st
 
-# -------------------------
-# 1. Gemini config
-# -------------------------
+# =========================
+# 1. Gemini 配置
+# =========================
 try:
     import google.generativeai as genai
     GEMINI_AVAILABLE = True
@@ -27,53 +26,42 @@ def get_gemini_client():
     return model
 
 
-SYSTEM_PROMPT = """
-You are a professional action film storyboard artist and AI video prompt writer.
-
-Goal:
-- Use models like Sora / Veo / Runway to generate a 9:16 vertical action clip.
-
-You will receive a JSON object named spec_json with:
-- clip_config: duration, aspect ratio, global style tags
-- characters: main character, opponent, and optional extras (e.g., 3-person street brawl)
-- combo_plan: a brief description of the martial arts combo (DO NOT change the order of moves)
-- camera_plan: shot and camera intentions (time ranges and priorities)
-- extra_controls: flags for micro expressions, environment reaction, blood level, safety, etc.
-- output_prefs: which outputs are requested
-
-Your tasks:
-
-1) Based on spec_json, write ONE English video prompt for an AI video model:
-   - Target models like Sora / Veo / Runway.
-   - Must include:
-     - Scene and world: place, era, lighting, overall mood.
-     - Main character and opponent appearance and clothing (consistent across shots). If extras exist, place them logically.
-     - A continuous description of the action (anticipation → strike → impact → recovery), strictly following combo_plan order.
-     - Physical reactions of the hit characters (head / torso / legs, steps, stumbling). For multi-person fights, describe interactions clearly.
-     - Camera language for each shot: shot size, angle, movement (handheld, tracking, wide, etc.).
-     - Reasonable environment reaction (dust, ropes, props, cars, ground), respecting extra_controls.
-   - Be concrete and precise. Avoid empty adjectives like "awesome, cool, epic".
-   - Obey safety_constraints. For example, if blood = "none", do NOT describe visible blood or gore.
-
-2) Then, write a Chinese timeline storyboard (中文时间轴分镜脚本):
-   - For each shot in camera_plan, output a block like:
-     【S01 | 0.0-0.5 秒】
-     画面内容：...
-     人物动作：...
-     被打反应：...
-     机位与运镜：...
-     环境与细节：...
-   - Cover every shot from camera_plan, you may slightly refine details.
-   - If extras exist (e.g., third fighter in a street brawl), clarify who is doing what.
-   - Keep continuity: same people, clothes, and damage state should stay consistent.
-
-3) Output format:
-   - First, output the English video prompt (one or more paragraphs).
-   - Then a blank line.
-   - Then output a line: "—— 中文时间轴分镜 ——"
-   - Then output the Chinese storyboard.
-   - Do NOT output JSON and do NOT explain your reasoning.
-"""
+SYSTEM_PROMPT = (
+    "You are a professional action film storyboard artist and AI video prompt writer.\n"
+    "\n"
+    "Goal:\n"
+    "- Use models like Sora / Veo / Runway to generate a 9:16 vertical action clip.\n"
+    "\n"
+    "You will receive a JSON object named spec_json with:\n"
+    "- clip_config: duration, aspect ratio, global style tags\n"
+    "- characters: main character, opponent, and optional extras (e.g., 3-person street brawl)\n"
+    "- combo_plan: a brief description of the martial arts combo (DO NOT change the order of moves)\n"
+    "- camera_plan: shot and camera intentions (time ranges and priorities)\n"
+    "- extra_controls: flags for micro expressions, environment reaction, blood level, safety, etc.\n"
+    "- output_prefs: which outputs are requested\n"
+    "\n"
+    "Your tasks:\n"
+    "1) Based on spec_json, write ONE English video prompt for an AI video model.\n"
+    "   - Target models like Sora / Veo / Runway.\n"
+    "   - Must include scene and world, character appearance and clothing, continuous action, physical reactions,\n"
+    "     camera language for each shot, and reasonable environment reaction respecting extra_controls.\n"
+    "   - Be concrete and precise. Avoid empty adjectives like 'awesome, cool, epic'.\n"
+    "   - Obey safety_constraints. For example, if blood = 'none', do NOT describe visible blood or gore.\n"
+    "\n"
+    "2) Then, write a Chinese timeline storyboard (中文时间轴分镜脚本):\n"
+    "   - For each shot in camera_plan, output a block like:\n"
+    "     【S01 | 0.0-0.5 秒】\\n画面内容：...\\n人物动作：...\\n被打反应：...\\n机位与运镜：...\\n环境与细节：...\n"
+    "   - Cover every shot from camera_plan, you may slightly refine details.\n"
+    "   - If extras exist (e.g., third fighter in a street brawl), clarify who is doing what.\n"
+    "   - Keep continuity: same people, clothes, and damage state should stay consistent.\n"
+    "\n"
+    "3) Output format:\n"
+    "   - First, output the English video prompt (one or more paragraphs).\n"
+    "   - Then a blank line.\n"
+    "   - Then output a line: '—— 中文时间轴分镜 ——'.\n"
+    "   - Then output the Chinese storyboard.\n"
+    "   - Do NOT output JSON and do NOT explain your reasoning.\n"
+)
 
 
 def call_gemini_with_spec(spec: Dict[str, Any]) -> str:
@@ -87,261 +75,264 @@ def call_gemini_with_spec(spec: Dict[str, Any]) -> str:
 
     spec_str = json.dumps(spec, ensure_ascii=False, indent=2)
 
-    user_prompt = f"""
-下面是本次视频片段的结构化规格说明 spec_json：
+    user_prompt = (
+        "下面是本次视频片段的结构化规格说明 spec_json：\n\n"
+        "```json\n" + spec_str + "\n```\n\n"
+        "请严格按照 System 提示中的要求，先输出英文视频提示词，再输出中文时间轴分镜脚本。"
+    )
 
-```json
-{spec_str}
-chat = model.start_chat(history=[
-    {"role": "system", "parts": [SYSTEM_PROMPT]},
-    {"role": "user", "parts": [user_prompt]}
-])
+    chat = model.start_chat(history=[
+        {"role": "system", "parts": [SYSTEM_PROMPT]},
+        {"role": "user", "parts": [user_prompt]},
+    ])
 
-resp = chat.send_message("请开始生成。")
-return resp.text
+    resp = chat.send_message("请开始生成。")
+    return resp.text
 
--------------------------
-2. Preset data (characters / styles / combos / cameras)
--------------------------
+
+# =========================
+# 2. 预设数据
+# =========================
 
 CHARACTERS: Dict[str, Dict[str, Any]] = {
-"female_cn_sanda": {
-"name": "女主 - 中国散打",
-"role": "female_pro_fighter",
-"nationality_style": "Chinese modern",
-"visual_brief": (
-"22-year-old athletic Chinese woman with a long black ponytail, "
-"wearing a black sports bra, tight black training pants and black MMA gloves, "
-"light sweat on her skin"
-),
-"motion_personality": "sharp_and_calm"
-},
-"male_us_mma": {
-"name": "男对手 - 美国 MMA",
-"role": "male_fighter",
-"nationality_style": "US MMA",
-"visual_brief": (
-"stocky male fighter in his late 20s with short dark hair and slight beard stubble, "
-"wearing red fight shorts and 4oz MMA gloves"
-),
-"motion_personality": "aggressive_but_tiring"
-},
-"male_hk_80s_thug": {
-"name": "男对手 - 港片小混混",
-"role": "male_thug",
-"nationality_style": "Hong Kong 1980s",
-"visual_brief": (
-"lean Hong Kong street thug in a wrinkled white shirt, loose dark trousers and worn leather shoes, "
-"slightly messy hair"
-),
-"motion_personality": "wild_and_showoff"
-},
-"female_wuxia_swordswoman": {
-"name": "女主 - 武侠女侠",
-"role": "female_swordswoman",
-"nationality_style": "Chinese ancient wuxia",
-"visual_brief": (
-"elegant young swordswoman in flowing light-colored robes, "
-"long black hair tied partly up, sword sheath on her back"
-),
-"motion_personality": "graceful_but_deadly"
-},
-"male_cn_street_punk": {
-"name": "男角色 - 现代街头混混",
-"role": "male_street_punk",
-"nationality_style": "Chinese modern street",
-"visual_brief": (
-"young Chinese street punk in a dark hoodie, ripped jeans and sneakers, "
-"short spiky hair, a bit cocky"
-),
-"motion_personality": "reckless_and_aggressive"
-},
-"male_cn_street_big": {
-"name": "男角色 - 现代街头壮汉",
-"role": "male_street_heavy",
-"nationality_style": "Chinese modern street",
-"visual_brief": (
-"broad-shouldered Chinese man in a bomber jacket, dark pants and boots, "
-"short hair, heavy build"
-),
-"motion_personality": "slow_but_powerful"
-}
+    "female_cn_sanda": {
+        "name": "女主 - 中国散打",
+        "role": "female_pro_fighter",
+        "nationality_style": "Chinese modern",
+        "visual_brief": (
+            "22-year-old athletic Chinese woman with a long black ponytail, "
+            "wearing a black sports bra, tight black training pants and black MMA gloves, "
+            "light sweat on her skin"
+        ),
+        "motion_personality": "sharp_and_calm",
+    },
+    "male_us_mma": {
+        "name": "男对手 - 美国 MMA",
+        "role": "male_fighter",
+        "nationality_style": "US MMA",
+        "visual_brief": (
+            "stocky male fighter in his late 20s with short dark hair and slight beard stubble, "
+            "wearing red fight shorts and 4oz MMA gloves"
+        ),
+        "motion_personality": "aggressive_but_tiring",
+    },
+    "male_hk_80s_thug": {
+        "name": "男对手 - 港片小混混",
+        "role": "male_thug",
+        "nationality_style": "Hong Kong 1980s",
+        "visual_brief": (
+            "lean Hong Kong street thug in a wrinkled white shirt, loose dark trousers and worn leather shoes, "
+            "slightly messy hair"
+        ),
+        "motion_personality": "wild_and_showoff",
+    },
+    "female_wuxia_swordswoman": {
+        "name": "女主 - 武侠女侠",
+        "role": "female_swordswoman",
+        "nationality_style": "Chinese ancient wuxia",
+        "visual_brief": (
+            "elegant young swordswoman in flowing light-colored robes, "
+            "long black hair tied partly up, sword sheath on her back"
+        ),
+        "motion_personality": "graceful_but_deadly",
+    },
+    "male_cn_street_punk": {
+        "name": "男角色 - 现代街头混混",
+        "role": "male_street_punk",
+        "nationality_style": "Chinese modern street",
+        "visual_brief": (
+            "young Chinese street punk in a dark hoodie, ripped jeans and sneakers, "
+            "short spiky hair, a bit cocky"
+        ),
+        "motion_personality": "reckless_and_aggressive",
+    },
+    "male_cn_street_big": {
+        "name": "男角色 - 现代街头壮汉",
+        "role": "male_street_heavy",
+        "nationality_style": "Chinese modern street",
+        "visual_brief": (
+            "broad-shouldered Chinese man in a bomber jacket, dark pants and boots, "
+            "short hair, heavy build"
+        ),
+        "motion_personality": "slow_but_powerful",
+    },
 }
 
 STYLE_PRESETS: Dict[str, Dict[str, Any]] = {
-"cn_modern_sanda_gym": {
-"label": "中国现代 - 散打馆",
-"style_tags": ["cn_modern_sanda", "gym_interior", "cinematic"],
-"description": "现代中国散打训练馆，冷色荧光灯、沙袋、擂台、镜面墙。"
-},
-"hk_80s_factory": {
-"label": "香港 80s - 工厂/仓库",
-"style_tags": ["hk_80s_kungfu", "warehouse", "stylized"],
-"description": "80年代港片风格，老工厂或仓库，木箱、铁链、灰尘光束。"
-},
-"cn_wuxia_courtyard": {
-"label": "古代武侠 - 山门/院落",
-"style_tags": ["cn_wuxia", "ancient_courtyard", "fantasy_cinematic"],
-"description": "古代武林门派山门或庭院，石板地、木柱、飘动的布幡和树叶。"
-},
-"us_mma_cage": {
-"label": "美国 UFC 笼斗",
-"style_tags": ["us_mma", "cage_arena", "sports_cinematic"],
-"description": "MMA 笼子擂台，强烈顶光，周围观众在黑暗中吼叫。"
-},
-"cn_modern_street_night": {
-"label": "中国现代 - 夜晚街头停车场",
-"style_tags": ["cn_modern_street", "parking_lot_night", "gritty_cinematic"],
-"description": "城市夜晚空旷停车场，路灯、霓虹反射在湿漉漉地面，适合街头群殴。"
-}
+    "cn_modern_sanda_gym": {
+        "label": "中国现代 - 散打馆",
+        "style_tags": ["cn_modern_sanda", "gym_interior", "cinematic"],
+        "description": "现代中国散打训练馆，冷色荧光灯、沙袋、擂台、镜面墙。",
+    },
+    "hk_80s_factory": {
+        "label": "香港 80s - 工厂/仓库",
+        "style_tags": ["hk_80s_kungfu", "warehouse", "stylized"],
+        "description": "80年代港片风格，老工厂或仓库，木箱、铁链、灰尘光束。",
+    },
+    "cn_wuxia_courtyard": {
+        "label": "古代武侠 - 山门/院落",
+        "style_tags": ["cn_wuxia", "ancient_courtyard", "fantasy_cinematic"],
+        "description": "古代武林门派山门或庭院，石板地、木柱、飘动的布幡和树叶。",
+    },
+    "us_mma_cage": {
+        "label": "美国 UFC 笼斗",
+        "style_tags": ["us_mma", "cage_arena", "sports_cinematic"],
+        "description": "MMA 笼子擂台，强烈顶光，周围观众在黑暗中吼叫。",
+    },
+    "cn_modern_street_night": {
+        "label": "中国现代 - 夜晚街头停车场",
+        "style_tags": ["cn_modern_street", "parking_lot_night", "gritty_cinematic"],
+        "description": "城市夜晚空旷停车场，路灯、霓虹反射在湿漉漉地面，适合街头群殴。",
+    },
 }
 
 COMBO_PRESETS: Dict[str, Dict[str, Any]] = {
-"combo_jab_cross_lowkick": {
-"label": "直拳 + 重拳 + 低扫",
-"description": (
-"a fast left jab to the face, a heavy right cross, "
-"then a powerful right low kick to the lead thigh"
-),
-"default_duration": 1.8
-},
-"combo_block_cross": {
-"label": "格挡 + 右重拳反击",
-"description": (
-"she blocks an incoming strike, then fires a heavy right cross "
-"to the opponent's head"
-),
-"default_duration": 1.2
-},
-"combo_clinch_knee_push": {
-"label": "抱颈 + 膝撞 + 推开",
-"description": (
-"she secures a clinch, drives a hard knee into the body, "
-"then shoves the opponent away"
-),
-"default_duration": 1.8
-},
-"combo_wuxia_qinggong_sword": {
-"label": "武侠轻功：闪身 + 拔剑 + 腾空一击",
-"description": (
-"she uses light-footwork to vanish from the opponent's line of attack, "
-"appears at a new angle, draws her sword in one fluid motion, then launches into "
-"a brief airborne slash before landing lightly on a stone railing"
-),
-"default_duration": 2.8
-},
-"combo_street_brawl_3p": {
-"label": "街头群殴：一打二组合",
-"description": (
-"the main fighter faces two attackers at once: she elbows the attacker on her left, "
-"then front-kicks the one on her right, before grabbing one of them and shoving him "
-"hard into a parked car"
-),
-"default_duration": 2.5
-}
+    "combo_jab_cross_lowkick": {
+        "label": "直拳 + 重拳 + 低扫",
+        "description": (
+            "a fast left jab to the face, a heavy right cross, "
+            "then a powerful right low kick to the lead thigh"
+        ),
+        "default_duration": 1.8,
+    },
+    "combo_block_cross": {
+        "label": "格挡 + 右重拳反击",
+        "description": (
+            "she blocks an incoming strike, then fires a heavy right cross "
+            "to the opponent's head"
+        ),
+        "default_duration": 1.2,
+    },
+    "combo_clinch_knee_push": {
+        "label": "抱颈 + 膝撞 + 推开",
+        "description": (
+            "she secures a clinch, drives a hard knee into the body, "
+            "then shoves the opponent away"
+        ),
+        "default_duration": 1.8,
+    },
+    "combo_wuxia_qinggong_sword": {
+        "label": "武侠轻功：闪身 + 拔剑 + 腾空一击",
+        "description": (
+            "she uses light-footwork to vanish from the opponent's line of attack, "
+            "appears at a new angle, draws her sword in one fluid motion, then launches into "
+            "a brief airborne slash before landing lightly on a stone railing"
+        ),
+        "default_duration": 2.8,
+    },
+    "combo_street_brawl_3p": {
+        "label": "街头群殴：一打二组合",
+        "description": (
+            "the main fighter faces two attackers at once: she elbows the attacker on her left, "
+            "then front-kicks the one on her right, before grabbing one of them and shoving him "
+            "hard into a parked car"
+        ),
+        "default_duration": 2.5,
+    },
 }
 
 CAMERA_PRESETS: Dict[str, Dict[str, Any]] = {
-"dynamic_close": {
-"label": "动态近景格斗风",
-"shots_template": "jab_cross_lowkick",
-"description": "手持近景 + 低机位跟腿 + 中景收尾。"
-},
-"wide_reveal": {
-"label": "宽幅环境展示风",
-"shots_template": "wide_focus",
-"description": "开头环境大全景，中景打斗，最后拉远。"
-},
-"street_brawl_dynamic": {
-"label": "街头群殴 - 混乱动态运镜",
-"shots_template": "street_brawl_3p",
-"description": "略带手持抖动的大景 + 中景切换，突出一打二的混乱感和被撞车辆等环境反馈。"
-}
+    "dynamic_close": {
+        "label": "动态近景格斗风",
+        "shots_template": "jab_cross_lowkick",
+        "description": "手持近景 + 低机位跟腿 + 中景收尾。",
+    },
+    "wide_reveal": {
+        "label": "宽幅环境展示风",
+        "shots_template": "wide_focus",
+        "description": "开头环境大全景，中景打斗，最后拉远。",
+    },
+    "street_brawl_dynamic": {
+        "label": "街头群殴 - 混乱动态运镜",
+        "shots_template": "street_brawl_3p",
+        "description": "略带手持抖动的大景 + 中景切换，突出一打二的混乱感和被撞车辆等环境反馈。",
+    },
 }
 
+
 def build_camera_shots(template_name: str, duration_sec: float) -> List[Dict[str, Any]]:
-"""Build camera shots list based on a template name and total duration."""
-if template_name == "jab_cross_lowkick":
-t1 = round(duration_sec * 0.3, 2)
-t2 = round(duration_sec * 0.8, 2)
-t3 = round(duration_sec, 2)
-return [
-{
-"shot_id": "S01",
-"time_range": [0.0, t1],
-"brief": "tight medium handheld shot framing both fighters from the waist up as she throws the jab and cross, camera slightly below eye level",
-"priority": "show_face_and_gloves_impact"
-},
-{
-"shot_id": "S02",
-"time_range": [t1, t2],
-"brief": "low tracking shot near the floor that follows the arc of her right shin slamming into his thigh, emphasizing muscle vibration and his leg buckling",
-"priority": "show_kick_power_and_leg_reaction"
-},
-{
-"shot_id": "S03",
-"time_range": [t2, t3],
-"brief": "medium shot pulling back slightly to show him stumbling sideways, catching his balance and revealing more of the environment",
-"priority": "show_overall_reaction_and_space"
-}
-]
-elif template_name == "wide_focus":
-t1 = round(duration_sec * 0.25, 2)
-t2 = round(duration_sec * 0.7, 2)
-t3 = round(duration_sec, 2)
-return [
-{
-"shot_id": "S01",
-"time_range": [0.0, t1],
-"brief": "wide establishing shot showing the whole space and both fighters circling each other",
-"priority": "show_environment_and_positions"
-},
-{
-"shot_id": "S02",
-"time_range": [t1, t2],
-"brief": "medium shot focusing on the main fighter as she lands the key strikes",
-"priority": "show_main_actions"
-},
-{
-"shot_id": "S03",
-"time_range": [t2, t3],
-"brief": "wide or medium-wide shot showing the aftermath and how both fighters are positioned after the exchange",
-"priority": "show_aftermath"
-}
-]
-elif template_name == "street_brawl_3p":
-t1 = round(duration_sec * 0.3, 2)
-t2 = round(duration_sec * 0.75, 2)
-t3 = round(duration_sec, 2)
-return [
-{
-"shot_id": "S01",
-"time_range": [0.0, t1],
-"brief": "wide shot in a dimly lit parking lot at night, showing the main fighter facing two attackers, wet pavement reflecting neon lights",
-"priority": "show_three_characters_and_environment"
-},
-{
-"shot_id": "S02",
-"time_range": [t1, t2],
-"brief": "chaotic handheld medium shot that stays close as she elbows the attacker on the left and front-kicks the one on the right, camera reacting to each hit",
-"priority": "show_elbow_and_front_kick_impacts"
-},
-{
-"shot_id": "S03",
-"time_range": [t2, t3],
-"brief": "medium-wide shot as she grabs one attacker and shoves him hard into a parked car, the car shakes and the other attacker recovers in the background",
-"priority": "show_shove_and_environment_reaction"
-}
-]
-else:
-return [
-{
-"shot_id": "S01",
-"time_range": [0.0, round(duration_sec, 2)],
-"brief": "single continuous medium shot showing the whole exchange",
-"priority": "show_whole_action"
-}
-]
+    # 根据模板名和时长，生成 shots 列表
+    if template_name == "jab_cross_lowkick":
+        t1 = round(duration_sec * 0.3, 2)
+        t2 = round(duration_sec * 0.8, 2)
+        t3 = round(duration_sec, 2)
+        return [
+            {
+                "shot_id": "S01",
+                "time_range": [0.0, t1],
+                "brief": "tight medium handheld shot framing both fighters from the waist up as she throws the jab and cross, camera slightly below eye level",
+                "priority": "show_face_and_gloves_impact",
+            },
+            {
+                "shot_id": "S02",
+                "time_range": [t1, t2],
+                "brief": "low tracking shot near the floor that follows the arc of her right shin slamming into his thigh, emphasizing muscle vibration and his leg buckling",
+                "priority": "show_kick_power_and_leg_reaction",
+            },
+            {
+                "shot_id": "S03",
+                "time_range": [t2, t3],
+                "brief": "medium shot pulling back slightly to show him stumbling sideways, catching his balance and revealing more of the environment",
+                "priority": "show_overall_reaction_and_space",
+            },
+        ]
+    if template_name == "wide_focus":
+        t1 = round(duration_sec * 0.25, 2)
+        t2 = round(duration_sec * 0.7, 2)
+        t3 = round(duration_sec, 2)
+        return [
+            {
+                "shot_id": "S01",
+                "time_range": [0.0, t1],
+                "brief": "wide establishing shot showing the whole space and both fighters circling each other",
+                "priority": "show_environment_and_positions",
+            },
+            {
+                "shot_id": "S02",
+                "time_range": [t1, t2],
+                "brief": "medium shot focusing on the main fighter as she lands the key strikes",
+                "priority": "show_main_actions",
+            },
+            {
+                "shot_id": "S03",
+                "time_range": [t2, t3],
+                "brief": "wide or medium-wide shot showing the aftermath and how both fighters are positioned after the exchange",
+                "priority": "show_aftermath",
+            },
+        ]
+    if template_name == "street_brawl_3p":
+        t1 = round(duration_sec * 0.3, 2)
+        t2 = round(duration_sec * 0.75, 2)
+        t3 = round(duration_sec, 2)
+        return [
+            {
+                "shot_id": "S01",
+                "time_range": [0.0, t1],
+                "brief": "wide shot in a dimly lit parking lot at night, showing the main fighter facing two attackers, wet pavement reflecting neon lights",
+                "priority": "show_three_characters_and_environment",
+            },
+            {
+                "shot_id": "S02",
+                "time_range": [t1, t2],
+                "brief": "chaotic handheld medium shot that stays close as she elbows the attacker on the left and front-kicks the one on the right, camera reacting to each hit",
+                "priority": "show_elbow_and_front_kick_impacts",
+            },
+            {
+                "shot_id": "S03",
+                "time_range": [t2, t3],
+                "brief": "medium-wide shot as she grabs one attacker and shoves him hard into a parked car, the car shakes and the other attacker recovers in the background",
+                "priority": "show_shove_and_environment_reaction",
+            },
+        ]
+    return [
+        {
+            "shot_id": "S01",
+            "time_range": [0.0, round(duration_sec, 2)],
+            "brief": "single continuous medium shot showing the whole exchange",
+            "priority": "show_whole_action",
+        }
+    ]
+
 
 def build_spec_json(
     duration_sec: float,
@@ -358,9 +349,9 @@ def build_spec_json(
     include_env: bool,
     include_camera_detail: bool,
     blood_level: str,
-    audio_hint: str
+    audio_hint: str,
 ) -> Dict[str, Any]:
-    # Assemble the spec_json sent to Gemini based on UI selections.
+    # 根据 UI 选择组合出 spec_json
     style_preset = STYLE_PRESETS[style_preset_key]
     style_tags = style_preset["style_tags"]
 
@@ -377,15 +368,15 @@ def build_spec_json(
             "role": main_char["role"],
             "nationality_style": main_char["nationality_style"],
             "visual_brief": main_char["visual_brief"],
-            "motion_personality": main_char["motion_personality"]
+            "motion_personality": main_char["motion_personality"],
         },
         "opponent": {
             "id": "opponent_fighter",
             "role": opp_char["role"],
             "nationality_style": opp_char["nationality_style"],
             "visual_brief": opp_char["visual_brief"],
-            "motion_personality": opp_char["motion_personality"]
-        }
+            "motion_personality": opp_char["motion_personality"],
+        },
     }
 
     if extra_char_key != "none" and extra_char_key in CHARACTERS:
@@ -396,7 +387,7 @@ def build_spec_json(
                 "role": extra_char["role"],
                 "nationality_style": extra_char["nationality_style"],
                 "visual_brief": extra_char["visual_brief"],
-                "motion_personality": extra_char["motion_personality"]
+                "motion_personality": extra_char["motion_personality"],
             }
         ]
 
@@ -406,18 +397,18 @@ def build_spec_json(
             "aspect_ratio": "9:16",
             "style_tags": style_tags,
             "energy_level": energy_level,
-            "violence_level": violence_level
+            "violence_level": violence_level,
         },
         "characters": characters_block,
         "combo_plan": {
             "combo_id": combo_key,
             "high_level_description": combo["description"],
             "tempo": "explosive_then_brief_pause",
-            "intensity": "high"
+            "intensity": "high",
         },
         "camera_plan": {
             "overall_style": camera_preset["label"],
-            "shots": shots
+            "shots": shots,
         },
         "extra_controls": {
             "include_micro_expressions": include_micro,
@@ -426,29 +417,30 @@ def build_spec_json(
             "include_camera_details": include_camera_detail,
             "blood": blood_level,
             "audio_hint": audio_hint,
-            "safety_constraints": "no graphic gore, follow platform rules, respect the blood setting."
+            "safety_constraints": "no graphic gore, follow platform rules, respect the blood setting.",
         },
         "output_prefs": {
             "need_english_video_prompt": True,
             "need_chinese_timeline": True,
-            "timeline_step": 0.1
-        }
+            "timeline_step": 0.1,
+        },
     }
     return spec
 
--------------------------
-4. Streamlit APP UI
--------------------------
+
+# =========================
+# 4. Streamlit APP UI
+# =========================
 
 st.set_page_config(page_title="武打分镜提示词工厂 PRO", layout="wide")
 
-st.title("🥋 武打分镜提示词工厂 PRO（Gemini 版本）")
+st.title("武打分镜提示词工厂 PRO（Gemini 版本）")
 
 st.markdown(
-"通过选择【角色 / 世界观 / 动作套餐 / 运镜风格 / 细节开关】，"
-"自动生成结构化 spec_json 并调用 Gemini 输出：\n\n"
-"- 英文视频提示词（给 Sora / Veo / Runway 等使用）\n"
-"- 中文时间轴分镜脚本（方便你自己调教和复用）"
+    "通过选择【角色 / 世界观 / 动作套餐 / 运镜风格 / 细节开关】，"
+    "自动生成结构化 `spec_json` 并调用 Gemini 输出：\n\n"
+    "- 英文视频提示词（给 Sora / Veo / Runway 使用）\n"
+    "- 中文时间轴分镜脚本（方便你自己调教和复用）"
 )
 
 st.markdown("---")
@@ -456,117 +448,128 @@ st.markdown("---")
 col_left, col_right = st.columns([1, 1])
 
 with col_left:
-st.header("① 基础设置")
+    st.header("① 基础设置")
+
     style_key = st.selectbox(
-    "世界观 / 风格预设",
-    options=list(STYLE_PRESETS.keys()),
-    format_func=lambda k: STYLE_PRESETS[k]["label"]
-)
-st.caption(STYLE_PRESETS[style_key]["description"])
+        "世界观 / 风格预设",
+        options=list(STYLE_PRESETS.keys()),
+        format_func=lambda k: STYLE_PRESETS[k]["label"],
+    )
+    st.caption(STYLE_PRESETS[style_key]["description"])
 
-main_char_key = st.selectbox(
-    "主角角色",
-    options=list(CHARACTERS.keys()),
-    format_func=lambda k: CHARACTERS[k]["name"]
-)
-opp_char_key = st.selectbox(
-    "对手角色",
-    options=list(CHARACTERS.keys()),
-    index=1 if len(CHARACTERS) > 1 else 0,
-    format_func=lambda k: CHARACTERS[k]["name"]
-)
-
-extra_options = ["none"] + list(CHARACTERS.keys())
-extra_char_key = st.selectbox(
-    "第三角色（可选，用于街头群殴 / 围攻场景）",
-    options=extra_options,
-    format_func=lambda k: "（无额外角色）" if k == "none" else CHARACTERS[k]["name"]
-)
-
-combo_key = st.selectbox(
-    "动作套餐（连招）",
-    options=list(COMBO_PRESETS.keys()),
-    format_func=lambda k: COMBO_PRESETS[k]["label"]
-)
-default_dur = COMBO_PRESETS[combo_key]["default_duration"]
-duration_sec = st.slider(
-    "片段总时长（秒）",
-    min_value=0.8,
-    max_value=6.0,
-    value=float(default_dur),
-    step=0.1
-)
-
-energy_level = st.selectbox("能量强度（Energy Level）", ["low", "medium", "high"], index=2)
-violence_level = st.selectbox("暴力程度（Violence Level）", ["soft", "moderate", "hard"], index=1)
-
-camera_preset_key = st.selectbox(
-    "运镜风格预设",
-    options=list(CAMERA_PRESETS.keys()),
-    format_func=lambda k: CAMERA_PRESETS[k]["label"]
-)
-st.caption(CAMERA_PRESETS[camera_preset_key]["description"])
-
-st.header("② 细节与安全控制")
-
-include_micro = st.checkbox("加入微表情 / 眼神细节", value=True)
-include_breath = st.checkbox("加入呼吸 / 体力消耗状态", value=True)
-include_env = st.checkbox("加入环境反馈（灰尘 / 道具 / 绳索等）", value=True)
-include_camera_detail = st.checkbox("加入镜头焦段 / 景深 / 运动模糊等细节", value=True)
-
-blood_level = st.selectbox("血腥程度 blood", ["none", "light", "visible"], index=0)
-audio_hint = st.text_input(
-    "声音 / 节奏提示（英文简写）",
-    value="short sharp impact sounds, ambient noise, do not overdescribe music"
-)
-
-generate_btn = st.button("🚀 生成 spec_json 并调用 Gemini", type="primary")
-if generate_btn:
-    spec_json = build_spec_json(
-        duration_sec=duration_sec,
-        style_preset_key=style_key,
-        main_char_key=main_char_key,
-        opp_char_key=opp_char_key,
-        extra_char_key=extra_char_key,
-        combo_key=combo_key,
-        energy_level=energy_level,
-        violence_level=violence_level,
-        camera_preset_key=camera_preset_key,
-        include_micro=include_micro,
-        include_breath=include_breath,
-        include_env=include_env,
-        include_camera_detail=include_camera_detail,
-        blood_level=blood_level,
-        audio_hint=audio_hint
+    main_char_key = st.selectbox(
+        "主角角色",
+        options=list(CHARACTERS.keys()),
+        format_func=lambda k: CHARACTERS[k]["name"],
+    )
+    opp_char_key = st.selectbox(
+        "对手角色",
+        options=list(CHARACTERS.keys()),
+        index=1 if len(CHARACTERS) > 1 else 0,
+        format_func=lambda k: CHARACTERS[k]["name"],
     )
 
-    st.subheader("🔧 结构化 spec_json（可以下载 / 复用）")
-    st.json(spec_json, expanded=False)
-
-    st.download_button(
-        "💾 下载 spec_json",
-        data=json.dumps(spec_json, ensure_ascii=False, indent=2),
-        file_name="spec_json_fight_clip.json",
-        mime="application/json"
+    extra_options = ["none"] + list(CHARACTERS.keys())
+    extra_char_key = st.selectbox(
+        "第三角色（可选，用于街头群殴 / 围攻）",
+        options=extra_options,
+        format_func=lambda k: "（无额外角色）" if k == "none" else CHARACTERS[k]["name"],
     )
 
-    st.subheader("🧠 调用 Gemini 生成文案")
-    with st.spinner("正在调用 Gemini 生成英文 Prompt + 中文时间轴分镜..."):
-        text = call_gemini_with_spec(spec_json)
+    combo_key = st.selectbox(
+        "动作套餐（连招）",
+        options=list(COMBO_PRESETS.keys()),
+        format_func=lambda k: COMBO_PRESETS[k]["label"],
+    )
+    default_dur = COMBO_PRESETS[combo_key]["default_duration"]
+    duration_sec = st.slider(
+        "片段总时长（秒）",
+        min_value=0.8,
+        max_value=6.0,
+        value=float(default_dur),
+        step=0.1,
+    )
 
-    if "—— 中文时间轴分镜 ——" in text:
-        en_part, zh_part = text.split("—— 中文时间轴分镜 ——", 1)
+    energy_level = st.selectbox(
+        "能量强度（Energy Level）", ["low", "medium", "high"], index=2
+    )
+    violence_level = st.selectbox(
+        "暴力程度（Violence Level）", ["soft", "moderate", "hard"], index=1
+    )
+
+    camera_preset_key = st.selectbox(
+        "运镜风格预设",
+        options=list(CAMERA_PRESETS.keys()),
+        format_func=lambda k: CAMERA_PRESETS[k]["label"],
+    )
+    st.caption(CAMERA_PRESETS[camera_preset_key]["description"])
+
+    st.header("② 细节与安全控制")
+
+    include_micro = st.checkbox("加入微表情 / 眼神细节", value=True)
+    include_breath = st.checkbox("加入呼吸 / 体力消耗状态", value=True)
+    include_env = st.checkbox("加入环境反馈（灰尘 / 道具 / 绳索等）", value=True)
+    include_camera_detail = st.checkbox(
+        "加入镜头焦段 / 景深 / 运动模糊等细节", value=True
+    )
+
+    blood_level = st.selectbox("血腥程度 blood", ["none", "light", "visible"], index=0)
+    audio_hint = st.text_input(
+        "声音 / 节奏提示（英文简写）",
+        value="short sharp impact sounds, ambient noise, do not overdescribe music",
+    )
+
+    generate_btn = st.button("生成 spec_json 并调用 Gemini", type="primary")
+
+with col_right:
+    st.header("③ 结果预览")
+
+    if generate_btn:
+        spec_json = build_spec_json(
+            duration_sec=duration_sec,
+            style_preset_key=style_key,
+            main_char_key=main_char_key,
+            opp_char_key=opp_char_key,
+            extra_char_key=extra_char_key,
+            combo_key=combo_key,
+            energy_level=energy_level,
+            violence_level=violence_level,
+            camera_preset_key=camera_preset_key,
+            include_micro=include_micro,
+            include_breath=include_breath,
+            include_env=include_env,
+            include_camera_detail=include_camera_detail,
+            blood_level=blood_level,
+            audio_hint=audio_hint,
+        )
+
+        st.subheader("结构化 spec_json（可以下载 / 复用）")
+        st.json(spec_json, expanded=False)
+
+        st.download_button(
+            "下载 spec_json",
+            data=json.dumps(spec_json, ensure_ascii=False, indent=2),
+            file_name="spec_json_fight_clip.json",
+            mime="application/json",
+        )
+
+        st.subheader("调用 Gemini 生成文案")
+        with st.spinner("正在生成英文 Prompt + 中文时间轴分镜..."):
+            text = call_gemini_with_spec(spec_json)
+
+        if "—— 中文时间轴分镜 ——" in text:
+            en_part, zh_part = text.split("—— 中文时间轴分镜 ——", 1)
+        else:
+            en_part, zh_part = text, ""
+
+        st.markdown("**① 英文视频提示词**")
+        st.text_area("English Prompt", en_part.strip(), height=260)
+
+        if zh_part.strip():
+            st.markdown("**② 中文时间轴分镜脚本**")
+            st.text_area("中文分镜", zh_part.strip(), height=260)
+        else:
+            st.info("未能自动分割中英文，完整输出如下：")
+            st.text_area("完整输出", text, height=400)
     else:
-        en_part, zh_part = text, ""
-
-    st.markdown("**① 英文视频提示词（给 Sora / Veo / Runway 用）**")
-    st.text_area("English Prompt", en_part.strip(), height=260)
-
-    if zh_part.strip():
-        st.markdown("**② 中文时间轴分镜脚本**")
-        st.text_area("中文分镜", zh_part.strip(), height=260)
-    else:
-        st.info("未能自动分割中英文，完整输出如下：")
-        st.text_area("完整输出", text, height=400)
-else:
-    st.info("在左侧完成配置后，点击「🚀 生成 spec_json 并调用 Gemini」。")
+        st.info("在左侧完成配置后，点击「生成 spec_json 并调用 Gemini」。")
