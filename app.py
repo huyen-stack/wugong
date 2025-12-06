@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import os
 import json
 from typing import Dict, Any, List
@@ -5,7 +6,7 @@ from typing import Dict, Any, List
 import streamlit as st
 
 # -------------------------
-# 1. Gemini 配置（记得设置环境变量 GEMINI_API_KEY）
+# 1. Gemini config
 # -------------------------
 try:
     import google.generativeai as genai
@@ -13,7 +14,7 @@ try:
 except ImportError:
     GEMINI_AVAILABLE = False
 
-MODEL_NAME = "gemini-2.0-pro"  # 按你实际可用的模型改
+MODEL_NAME = "gemini-2.0-pro"
 
 
 def get_gemini_client():
@@ -26,49 +27,51 @@ def get_gemini_client():
 
 
 SYSTEM_PROMPT = """
-你是一个专业的【动作电影分镜师 + AI 视频提示词写手】。
+You are a professional action film storyboard artist and AI video prompt writer.
 
-现在要用 Sora / Veo / Runway 这一类视频模型，生成 9:16 竖屏的武打短片。
+Goal:
+- Use models like Sora / Veo / Runway to generate a 9:16 vertical action clip.
 
-你会收到一个 JSON 对象 spec_json，里面包含：
-- clip_config：时长、画幅、整体风格标签
-- characters：主角、对手，以及可能存在的其他角色 extras（如街头群殴的一打二、一打三）
-- combo_plan：武打动作组合的简要说明（不要改变招式顺序）
-- camera_plan：分镜和运镜意图（每个镜头的时间范围和重点）
-- extra_controls：是否要微表情、环境反馈、血腥程度、安全限制等
-- output_prefs：需要输出哪几种格式
+You will receive a JSON object named spec_json with:
+- clip_config: duration, aspect ratio, global style tags
+- characters: main character, opponent, and optional extras (e.g., 3-person street brawl)
+- combo_plan: a brief description of the martial arts combo (DO NOT change the order of moves)
+- camera_plan: shot and camera intentions (time ranges and priorities)
+- extra_controls: flags for micro expressions, environment reaction, blood level, safety, etc.
+- output_prefs: which outputs are requested
 
-你的任务是：
+Your tasks:
 
-1）根据 spec_json，写出一段【英文 AI 视频提示词（prompt）】：
-   - 面向 Sora / Veo / Runway 等视频模型。
-   - 必须包含：
-     - 场景与世界观（地点、时代、光线、整体气氛）
-     - 主角与对手的外形和服装（保持前后一致），如有 extras 也要合理出现在画面中
-     - 连贯的动作描述（预备 → 出招 → 命中 → 收招），严格按 combo_plan 的顺序
-     - 被打者的物理反应（头部/躯干/腿的摆动、后退、踉跄），如是群殴要写清多人的互动
-     - 运镜与镜头语言（每个 shot 的景别、机位、运动方向、是否手持）
-     - 适当的环境反馈（灰尘、绳索、器械、地面等的反应），前提是不违背 extra_controls
-   - 尽量用清晰、具体的描述，少用“awesome, cool, epic”等空洞形容词。
-   - 遵守 safety_constraints，例如：如果 blood = "none"，就不要写见血画面。
+1) Based on spec_json, write ONE English video prompt for an AI video model:
+   - Target models like Sora / Veo / Runway.
+   - Must include:
+     - Scene and world: place, era, lighting, overall mood.
+     - Main character and opponent appearance and clothing (consistent across shots). If extras exist, place them logically.
+     - A continuous description of the action (anticipation → strike → impact → recovery), strictly following combo_plan order.
+     - Physical reactions of the hit characters (head / torso / legs, steps, stumbling). For multi-person fights, describe interactions clearly.
+     - Camera language for each shot: shot size, angle, movement (handheld, tracking, wide, etc.).
+     - Reasonable environment reaction (dust, ropes, props, cars, ground), respecting extra_controls.
+   - Be concrete and precise. Avoid empty adjectives like "awesome, cool, epic".
+   - Obey safety_constraints. For example, if blood = "none", do NOT describe visible blood or gore.
 
-2）然后，写出一段【中文时间轴分镜脚本】：
-   - 按镜头输出，例如：
+2) Then, write a Chinese timeline storyboard (中文时间轴分镜脚本):
+   - For each shot in camera_plan, output a block like:
      【S01 | 0.0-0.5 秒】
      画面内容：...
      人物动作：...
      被打反应：...
      机位与运镜：...
      环境与细节：...
-   - 必须覆盖 camera_plan 里的每个 shot，可以适度细化。
-   - 如果有 extras（如第三个人参与群殴），要在分镜里交代清楚是谁在做什么。
-   - 保持逻辑连贯，同一个人物的外形、服装和受伤状态前后一致。
+   - Cover every shot from camera_plan, you may slightly refine details.
+   - If extras exist (e.g., third fighter in a street brawl), clarify who is doing what.
+   - Keep continuity: same people, clothes, and damage state should stay consistent.
 
-3）输出格式：
-   - 先输出英文视频提示词（用一段或多段英文）
-   - 然后空一行，输出“—— 中文时间轴分镜 ——”
-   - 再输出中文的分镜脚本。
-   - 不要输出 JSON，不要解释你的思路。
+3) Output format:
+   - First, output the English video prompt (one or more paragraphs).
+   - Then a blank line.
+   - Then output a line: "—— 中文时间轴分镜 ——"
+   - Then output the Chinese storyboard.
+   - Do NOT output JSON and do NOT explain your reasoning.
 """
 
 
@@ -95,8 +98,9 @@ chat = model.start_chat(history=[
 
 resp = chat.send_message("请开始生成。")
 return resp.text
+
 -------------------------
-2. 预设数据（角色 / 风格 / 动作套餐 / 运镜）
+2. Preset data (characters / styles / combos / cameras)
 -------------------------
 
 CHARACTERS: Dict[str, Dict[str, Any]] = {
@@ -194,20 +198,28 @@ STYLE_PRESETS: Dict[str, Dict[str, Any]] = {
 COMBO_PRESETS: Dict[str, Dict[str, Any]] = {
 "combo_jab_cross_lowkick": {
 "label": "直拳 + 重拳 + 低扫",
-"description": "a fast left jab to the face, a heavy right cross, then a powerful right low kick to the lead thigh",
+"description": (
+"a fast left jab to the face, a heavy right cross, "
+"then a powerful right low kick to the lead thigh"
+),
 "default_duration": 1.8
 },
 "combo_block_cross": {
 "label": "格挡 + 右重拳反击",
-"description": "she blocks an incoming strike, then fires a heavy right cross to the opponent's head",
+"description": (
+"she blocks an incoming strike, then fires a heavy right cross "
+"to the opponent's head"
+),
 "default_duration": 1.2
 },
 "combo_clinch_knee_push": {
 "label": "抱颈 + 膝撞 + 推开",
-"description": "she secures a clinch, drives a hard knee into the body, then shoves the opponent away",
+"description": (
+"she secures a clinch, drives a hard knee into the body, "
+"then shoves the opponent away"
+),
 "default_duration": 1.8
 },
-# 新增：武侠轻功版连招
 "combo_wuxia_qinggong_sword": {
 "label": "武侠轻功：闪身 + 拔剑 + 腾空一击",
 "description": (
@@ -217,7 +229,6 @@ COMBO_PRESETS: Dict[str, Dict[str, Any]] = {
 ),
 "default_duration": 2.8
 },
-# 新增：街头群殴一打二
 "combo_street_brawl_3p": {
 "label": "街头群殴：一打二组合",
 "description": (
@@ -240,7 +251,6 @@ CAMERA_PRESETS: Dict[str, Dict[str, Any]] = {
 "shots_template": "wide_focus",
 "description": "开头环境大全景，中景打斗，最后拉远。"
 },
-# 新增：街头群殴用的运镜风格
 "street_brawl_dynamic": {
 "label": "街头群殴 - 混乱动态运镜",
 "shots_template": "street_brawl_3p",
@@ -249,9 +259,8 @@ CAMERA_PRESETS: Dict[str, Dict[str, Any]] = {
 }
 
 def build_camera_shots(template_name: str, duration_sec: float) -> List[Dict[str, Any]]:
-"""根据简单模板和时长，生成 shots 列表。"""
+"""Build camera shots list based on a template name and total duration."""
 if template_name == "jab_cross_lowkick":
-# 按 3 段分：S01 出拳，S02 低扫，S03 被踢后退
 t1 = round(duration_sec * 0.3, 2)
 t2 = round(duration_sec * 0.8, 2)
 t3 = round(duration_sec, 2)
@@ -300,7 +309,6 @@ return [
 }
 ]
 elif template_name == "street_brawl_3p":
-# 街头群殴一打二：S01 大景交代三人，S02 近景连续击打，S03 被撞到车上
 t1 = round(duration_sec * 0.3, 2)
 t2 = round(duration_sec * 0.75, 2)
 t3 = round(duration_sec, 2)
@@ -325,7 +333,6 @@ return [
 }
 ]
 else:
-# 默认单镜头
 return [
 {
 "shot_id": "S01",
@@ -334,10 +341,6 @@ return [
 "priority": "show_whole_action"
 }
 ]
-
--------------------------
-3. 组装 spec_json 的函数
--------------------------
 
 def build_spec_json(
 duration_sec: float,
@@ -356,11 +359,10 @@ include_camera_detail: bool,
 blood_level: str,
 audio_hint: str
 ) -> Dict[str, Any]:
-
+"""Assemble the spec_json sent to Gemini based on UI selections."""
 style_preset = STYLE_PRESETS[style_preset_key]
 style_tags = style_preset["style_tags"]
-
-main_char = CHARACTERS[main_char_key]
+    main_char = CHARACTERS[main_char_key]
 opp_char = CHARACTERS[opp_char_key]
 combo = COMBO_PRESETS[combo_key]
 camera_preset = CAMERA_PRESETS[camera_preset_key]
@@ -384,7 +386,6 @@ characters_block: Dict[str, Any] = {
     }
 }
 
-# 如果选了第三角色（用于群殴/围攻），加入 extras
 if extra_char_key != "none" and extra_char_key in CHARACTERS:
     extra_char = CHARACTERS[extra_char_key]
     characters_block["extras"] = [
@@ -432,7 +433,6 @@ spec = {
     }
 }
 return spec
-
 -------------------------
 4. Streamlit APP UI
 -------------------------
@@ -454,8 +454,7 @@ col_left, col_right = st.columns([1, 1])
 
 with col_left:
 st.header("① 基础设置")
-
-style_key = st.selectbox(
+    style_key = st.selectbox(
     "世界观 / 风格预设",
     options=list(STYLE_PRESETS.keys()),
     format_func=lambda k: STYLE_PRESETS[k]["label"]
@@ -474,7 +473,6 @@ opp_char_key = st.selectbox(
     format_func=lambda k: CHARACTERS[k]["name"]
 )
 
-# 第三角色（可选，用于群殴 / 围攻）
 extra_options = ["none"] + list(CHARACTERS.keys())
 extra_char_key = st.selectbox(
     "第三角色（可选，用于街头群殴 / 围攻场景）",
@@ -520,11 +518,6 @@ audio_hint = st.text_input(
 )
 
 generate_btn = st.button("🚀 生成 spec_json 并调用 Gemini", type="primary")
-
-
-with col_right:
-st.header("③ 结果预览")
-
 if generate_btn:
     spec_json = build_spec_json(
         duration_sec=duration_sec,
@@ -558,7 +551,6 @@ if generate_btn:
     with st.spinner("正在调用 Gemini 生成英文 Prompt + 中文时间轴分镜..."):
         text = call_gemini_with_spec(spec_json)
 
-    # 尝试把英文和中文部分分开显示
     if "—— 中文时间轴分镜 ——" in text:
         en_part, zh_part = text.split("—— 中文时间轴分镜 ——", 1)
     else:
@@ -575,33 +567,3 @@ if generate_btn:
         st.text_area("完整输出", text, height=400)
 else:
     st.info("在左侧完成配置后，点击「🚀 生成 spec_json 并调用 Gemini」。")
-
-
----
-
-### 接下来你可以直接这样玩：
-
-- 想要**武侠轻功连招**：
-  - 选 `世界观 = 古代武侠 - 山门/院落`
-  - 主角选「女主 - 武侠女侠」
-  - 动作套餐选「武侠轻功：闪身 + 拔剑 + 腾空一击」
-  - 运镜随便选 `dynamic_close` 或 `wide_reveal`（以后可以再加“轻功专用运镜”）
-
-- 想要**街头群殴一打二**：
-  - 世界观选「中国现代 - 夜晚街头停车场」
-  - 主角可以选「女主 - 中国散打」或其他
-  - 对手选一个街头角色，比如「现代街头混混」
-  - 第三角色选「现代街头壮汉」  
-  - 动作套餐选「街头群殴：一打二组合」
-  - 运镜选「街头群殴 - 混乱动态运镜」
-
-Gemini 会根据你给的 `spec_json` 自动把**一打二 + 多角色分镜 + 环境反馈**写进英文 Prompt 和中文分镜里。
-
-如果你后面还想加：
-
-- 「武侠轻功空中对撞」  
-- 「多人围殴镜头 + POV 第一视角」  
-- 「自动拼接多段 Clip 成 15 秒短片」  
-
-随时可以在这套框架上继续往上叠，我可以帮你一起扩展。
-::contentReference[oaicite:0]{index=0}
