@@ -4,28 +4,19 @@ import json
 from typing import Dict, Any, List
 
 import streamlit as st
+from google import genai  # 使用你已验证可用的新 SDK
 
 # =========================
 # 1. Gemini 配置
 # =========================
-try:
-    import google.generativeai as genai
-    GEMINI_AVAILABLE = True
-except ImportError:
-    GEMINI_AVAILABLE = False
 
-MODEL_NAME = "gemini-2.0-pro"
+API_KEY = os.getenv("GEMINI_API_KEY")
+if not API_KEY:
+    raise RuntimeError("请先设置环境变量 GEMINI_API_KEY")
 
+client = genai.Client(api_key=API_KEY)
 
-def get_gemini_client():
-    api_key = os.getenv("GEMINI_API_KEY", "")
-    if not GEMINI_AVAILABLE or not api_key:
-        return None
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel(MODEL_NAME)
-    return model
-
-
+# System 说明，写成普通字符串，避免三引号
 SYSTEM_PROMPT = (
     "You are a professional action film storyboard artist and AI video prompt writer.\n"
     "\n"
@@ -65,33 +56,32 @@ SYSTEM_PROMPT = (
 
 
 def call_gemini_with_spec(spec: Dict[str, Any]) -> str:
-    model = get_gemini_client()
-    if model is None:
-        return (
-            "【错误】Gemini 未配置成功，请确认：\n"
-            "1）已安装 google-generativeai\n"
-            "2）已设置 GEMINI_API_KEY 环境变量。"
-        )
-
+    """用你当前可用的方式调用 Gemini-2.0-Flash，返回纯文本输出"""
     spec_str = json.dumps(spec, ensure_ascii=False, indent=2)
 
-    user_prompt = (
-        "下面是本次视频片段的结构化规格说明 spec_json：\n\n"
-        "```json\n" + spec_str + "\n```\n\n"
-        "请严格按照 System 提示中的要求，先输出英文视频提示词，再输出中文时间轴分镜脚本。"
+    prompt = (
+        SYSTEM_PROMPT
+        + "\n\n"
+        + "下面是本次视频片段的结构化规格说明 spec_json：\n\n"
+        + "```json\n"
+        + spec_str
+        + "\n```"
+        + "\n\n请严格按照上述 System 说明，先输出英文视频提示词，再输出中文时间轴分镜脚本。"
     )
 
-    chat = model.start_chat(history=[
-        {"role": "system", "parts": [SYSTEM_PROMPT]},
-        {"role": "user", "parts": [user_prompt]},
-    ])
-
-    resp = chat.send_message("请开始生成。")
-    return resp.text
+    # 和你能用的小工具同一套调用方式，只是这里用 text/plain
+    response = client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=prompt,
+        config={
+            "response_mime_type": "text/plain",
+        },
+    )
+    return response.text
 
 
 # =========================
-# 2. 预设数据
+# 2. 预设数据（角色 / 风格 / 连招 / 运镜）
 # =========================
 
 CHARACTERS: Dict[str, Dict[str, Any]] = {
@@ -429,12 +419,12 @@ def build_spec_json(
 
 
 # =========================
-# 4. Streamlit APP UI
+# 3. Streamlit APP UI
 # =========================
 
 st.set_page_config(page_title="武打分镜提示词工厂 PRO", layout="wide")
 
-st.title("武打分镜提示词工厂 PRO（Gemini 版本）")
+st.title("🥋 武打分镜提示词工厂 PRO（Gemini 2.0 Flash 版本）")
 
 st.markdown(
     "通过选择【角色 / 世界观 / 动作套餐 / 运镜风格 / 细节开关】，"
